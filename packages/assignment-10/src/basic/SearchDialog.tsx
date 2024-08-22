@@ -34,6 +34,7 @@ import { Lecture } from './types.ts';
 import { parseSchedule } from "./utils.ts";
 import axios from "axios";
 import { DAY_LABELS } from './constants.ts';
+import MajorList from './MajorList.tsx';
 
 interface Props {
   searchInfo: {
@@ -176,12 +177,17 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
   const lastPage = useMemo(() => Math.ceil(filteredLectures.length / PAGE_SIZE), [filteredLectures]);
   const allMajors = useMemo(() => [...new Set(lectures.map(lecture => lecture.major))], [lectures]);
 
-  const changeSearchOption = (field: keyof SearchOption, value: SearchOption[typeof field]) => {
+  
+  const changeSearchOption = useCallback((field: keyof SearchOption, value: SearchOption[typeof field]) => {
     setPage(1);
-    setSearchOptions(({ ...searchOptions, [field]: value }));
+    setSearchOptions(prev => ({ ...prev, [field]: value }));
     loaderWrapperRef.current?.scrollTo(0, 0);
-  };
+  }, []);
 
+  const handleMajorChange = useCallback((majors: string[]) => {
+    changeSearchOption('majors', majors);
+  }, [changeSearchOption]);
+  
   const addSchedule = (lecture: Lecture) => {
     if (!searchInfo) return;
 
@@ -350,16 +356,11 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
                       </Tag>
                     ))}
                   </Wrap>
-                  <Stack spacing={2} overflowY="auto" h="100px" border="1px solid" borderColor="gray.200"
-                         borderRadius={5} p={2}>
-                    {allMajors.map(major => (
-                      <Box key={major}>
-                        <Checkbox key={major} size="sm" value={major}>
-                          {major.replace(/<p>/gi, ' ')}
-                        </Checkbox>
-                      </Box>
-                    ))}
-                  </Stack>
+                  <MajorList
+                    allMajors={allMajors}
+                    selectedMajors={searchOptions.majors}
+                    onMajorChange={handleMajorChange}
+                  />
                 </CheckboxGroup>
               </FormControl>
             </HStack>
