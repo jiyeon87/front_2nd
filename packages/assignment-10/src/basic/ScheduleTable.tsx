@@ -1,3 +1,4 @@
+import React, { useCallback, useMemo } from 'react';
 import {
   Box,
   Button,
@@ -15,15 +16,13 @@ import {
 import { CellSize, DAY_LABELS, 분 } from "./constants.ts";
 import { Schedule } from "./types.ts";
 import { fill2, parseHnM } from "./utils.ts";
-import { useDndContext, useDraggable } from "@dnd-kit/core";
+import { useDraggable } from "@dnd-kit/core";
 import { CSS } from '@dnd-kit/utilities';
-import { ComponentProps, Fragment } from "react";
+import { useScheduleContext } from "./ScheduleContext.tsx";
 
 interface Props {
   tableId: string;
-  schedules: Schedule[];
   onScheduleTimeClick?: (timeInfo: { day: string, time: number }) => void;
-  onDeleteButtonClick?: (timeInfo: { day: string, time: number }) => void;
 }
 
 const TIMES = [
@@ -38,32 +37,37 @@ const TIMES = [
     .map((v) => `${parseHnM(v)}~${parseHnM(v + 50 * 분)}`),
 ] as const;
 
-const ScheduleTable = ({ tableId, schedules, onScheduleTimeClick, onDeleteButtonClick }: Props) => {
+const ScheduleTable = React.memo(({ tableId, onScheduleTimeClick }: Props) => {
+  const { getSchedules, removeSchedule } = useScheduleContext();
+  
+  const schedules = useMemo(() => getSchedules(tableId), [getSchedules, tableId]);
 
-  const getColor = (lectureId: string): string => {
+  const getColor = useCallback((lectureId: string): string => {
     const lectures = [...new Set(schedules.map(({ lecture }) => lecture.id))];
     const colors = ["#fdd", "#ffd", "#dff", "#ddf", "#fdf", "#dfd"];
     return colors[lectures.indexOf(lectureId) % colors.length];
-  };
+  }, [schedules]);
 
-  const dndContext = useDndContext();
+  const handleCellClick = useCallback((day: string, time: number) => {
+    onScheduleTimeClick?.({ day, time });
+  }, [onScheduleTimeClick]);
 
-  const getActiveTableId = () => {
-    const activeId = dndContext.active?.id;
-    if (activeId) {
-      return String(activeId).split(":")[0];
-    }
-    return null;
-  }
+  const handleDeleteSchedule = useCallback((index: number) => {
+    removeSchedule(tableId, index);
+  }, [removeSchedule, tableId]);
 
-  const activeTableId = getActiveTableId();
+  const memoizedSchedules = useMemo(() => schedules.map((schedule, index) => (
+    <DraggableSchedule
+      key={`${schedule.lecture.title}-${index}`}
+      id={`${tableId}:${index}`}
+      data={schedule}
+      bg={getColor(schedule.lecture.id)}
+      onDeleteButtonClick={() => handleDeleteSchedule(index)}
+    />
+  )), [schedules, tableId, getColor, handleDeleteSchedule]);
 
   return (
-    <Box
-      position="relative"
-      outline={activeTableId === tableId ? "5px dashed" : undefined}
-      outlineColor="blue.300"
-    >
+    <Box position="relative">
       <Grid
         templateColumns={`120px repeat(${DAY_LABELS.length}, ${CellSize.WIDTH}px)`}
         templateRows={`40px repeat(${TIMES.length}, ${CellSize.HEIGHT}px)`}
@@ -86,7 +90,7 @@ const ScheduleTable = ({ tableId, schedules, onScheduleTimeClick, onDeleteButton
           </GridItem>
         ))}
         {TIMES.map((time, timeIndex) => (
-          <Fragment key={`시간-${timeIndex + 1}`}>
+          <React.Fragment key={`시간-${timeIndex + 1}`}>
             <GridItem
               borderTop="1px solid"
               borderColor="gray.300"
@@ -104,37 +108,24 @@ const ScheduleTable = ({ tableId, schedules, onScheduleTimeClick, onDeleteButton
                 bg={timeIndex > 17 ? 'gray.100' : 'white'}
                 cursor="pointer"
                 _hover={{ bg: 'yellow.100' }}
-                onClick={() => onScheduleTimeClick?.({ day, time: timeIndex + 1 })}
+                onClick={() => handleCellClick(day, timeIndex + 1)}
               />
             ))}
-          </Fragment>
+          </React.Fragment>
         ))}
       </Grid>
 
-      {schedules.map((schedule, index) => (
-        <DraggableSchedule
-          key={`${schedule.lecture.title}-${index}`}
-          id={`${tableId}:${index}`}
-          data={schedule}
-          bg={getColor(schedule.lecture.id)}
-          onDeleteButtonClick={() => onDeleteButtonClick?.({
-            day: schedule.day,
-            time: schedule.range[0],
-          })}
-        />
-      ))}
+      {memoizedSchedules}
     </Box>
   );
-};
+});
 
-const DraggableSchedule = ({
+const DraggableSchedule = React.memo(({
  id,
  data,
  bg,
  onDeleteButtonClick
-}: { id: string; data: Schedule } & ComponentProps<typeof Box> & {
-  onDeleteButtonClick: () => void
-}) => {
+}: { id: string; data: Schedule; bg: string; onDeleteButtonClick: () => void }) => {
   const { day, range, room, lecture } = data;
   const { attributes, setNodeRef, listeners, transform } = useDraggable({ id });
   const leftIndex = DAY_LABELS.indexOf(day as typeof DAY_LABELS[number]);
@@ -175,6 +166,6 @@ const DraggableSchedule = ({
       </PopoverContent>
     </Popover>
   );
-}
+});
 
 export default ScheduleTable;
